@@ -1,561 +1,186 @@
-/* eslint-disable @next/next/no-img-element */
-"use client";
-
-import { useState, useRef, useCallback } from "react";
-import Webcam from "react-webcam";
+import Link from "next/link";
 import { 
-  Camera, X, Zap, Image as ImageIcon, Loader2, 
-  AlertTriangle, RefreshCw, ShieldCheck, Biohazard, 
-  ChevronDown, ChevronUp, Search, Monitor, Smartphone, 
-  ScanBarcode
+  Camera, Zap, ScanBarcode, 
+  ArrowRight, Activity, CheckCircle2, Search,
+  ShieldCheck, AlertTriangle, Leaf, Sprout
 } from "lucide-react";
-import Image from "next/image";
-
-// --- INTERFACES ---
-interface AnalysisResult {
-  product_name: string;
-  detected_ingredients_text: string;
-  health_score: number;
-  halal_analysis: {
-    status: string;
-    reason: string;
-  };
-  allergen_list: string[];
-  nutrition_summary: {
-    sugar_g: number;
-    sugar_teaspoons: number;
-  };
-  alerts: {
-    name: string;
-    category: string;
-    risk: string;
-    severity: string;
-  }[];
-  brief_conclusion: string;
-}
-
-interface ChatMessage {
-  role: "user" | "assistant";
-  content: string;
-}
-
-interface ApiError {
-  error?: string;
-}
 
 export default function Home() {
-    // State: Scanner & Analysis
-    const [isCameraOpen, setIsCameraOpen] = useState(false);
-    const [image, setImage] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
-    const [result, setResult] = useState<AnalysisResult | null>(null);
-    const [showIngredients, setShowIngredients] = useState(false);
-
-    // State: Chat
-    const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-    const [chatInput, setChatInput] = useState("");
-    const [chatLoading, setChatLoading] = useState(false);
-
-    // Refs
-    const webcamRef = useRef<Webcam>(null);
-    const fileInputRef = useRef<HTMLInputElement>(null);
-    const chatEndRef = useRef<HTMLDivElement>(null);
-
-    const videoConstraints = { facingMode: "environment" };
-
-    // --- HANDLERS ---
-
-    const capture = useCallback(() => {
-      if (webcamRef.current) {
-        setImage(webcamRef.current.getScreenshot());
-        setIsCameraOpen(false);
-      }
-    }, [webcamRef]);
-
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setImage(reader.result as string);
-          setResult(null);
-        };
-        reader.readAsDataURL(file);
-      }
-    };
-
-    const analyzeImage = async () => {
-      if (!image) return;
-      setLoading(true);
-      setResult(null);
-      setChatMessages([]); // Reset chat on new analysis
+  return (
+    <main className="min-h-screen bg-forest-50 text-forest-900 font-sans selection:bg-forest-200 selection:text-forest-900 overflow-x-hidden w-full">
       
-      try {
-        const response = await fetch("/api/analyze", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ image }),
-        });
-        const data = await response.json() as AnalysisResult & ApiError;
-        if (data.error) throw new Error(data.error);
-        setResult(data);
-      } catch (error) {
-        console.error(error);
-        alert("Analysis failed. Ensure text is clearly visible.");
-      } finally {
-        setLoading(false);
-      }
-    };
+      <div className="fixed top-0 right-0 w-200 h-200 bg-forest-200 rounded-full blur-[120px] -mr-40 -mt-40 -z-10 opacity-60 mix-blend-multiply animate-pulse"></div>
+      <div className="fixed bottom-0 left-0 w-150 h-150 bg-forest-300 rounded-full blur-[120px] -ml-20 -mb-20 -z-10 opacity-40 mix-blend-multiply"></div>
 
-    const handleSendChat = async () => {
-      if (!chatInput.trim() || !result) return;
-
-      const userMsg = chatInput;
-      setChatInput(""); // Clear input
-      setChatMessages(prev => [...prev, { role: "user", content: userMsg }]);
-      setChatLoading(true);
-
-      try {
-        const response = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-            message: userMsg, 
-            productContext: result 
-          }),
-        });
-
-        const data = await response.json();
-        
-        setChatMessages(prev => [...prev, { 
-          role: "assistant", 
-          content: data.reply || "Connection error. Please try again." 
-        }]);
-      } catch (error) {
-        console.error(error);
-        setChatMessages(prev => [...prev, { 
-          role: "assistant", 
-          content: "Sorry, I encountered an error answering that." 
-        }]);
-      } finally {
-        setChatLoading(false);
-        setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-      }
-    };
-
-    const handleReset = () => {
-      setImage(null);
-      setResult(null);
-      setShowIngredients(false);
-      setChatMessages([]);
-      setChatInput("");
-    };
-
-    return (
-      <main className="min-h-screen bg-gray-50 text-gray-900 font-sans pb-10">
-        
-        {/* === HEADER === */}
-        <nav className="bg-white border-b border-gray-200 sticky top-0 z-30 shadow-sm/50 backdrop-blur-md">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="bg-blue-600 p-2 rounded-xl text-white shadow-lg shadow-blue-200">
-                <Zap size={22} fill="currentColor" />
-              </div>
-              <div>
-                <h1 className="font-bold text-xl tracking-tight leading-none text-gray-900">NutriSift AI</h1>
-                <p className="text-[10px] text-blue-600 font-bold tracking-wider uppercase">Multi-Platform Scanner</p>
-              </div>
-            </div>
-            
-            <div className="hidden md:flex items-center gap-4 text-xs font-medium text-gray-400 bg-gray-50 px-4 py-2 rounded-full border border-gray-100">
-              <span className="flex items-center gap-1"><Monitor size={14}/> Desktop Ready</span>
-              <div className="w-px h-3 bg-gray-300"></div>
-              <span className="flex items-center gap-1"><Smartphone size={14}/> Mobile Optimized</span>
-            </div>
+      <nav className="fixed top-0 left-0 right-0 z-50 w-full px-6 md:px-12 lg:px-20 h-24 flex items-center justify-between backdrop-blur-md bg-forest-50/80 border-b border-forest-100/50">
+        <div className="flex items-center gap-3">
+          <div className="bg-forest-600 p-2.5 rounded-2xl text-white shadow-lg shadow-forest-200">
+            <Leaf size={24} fill="currentColor" />
           </div>
-        </nav>
-
-        {/* === CAMERA MODAL === */}
-        {isCameraOpen && (
-          <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="relative w-full max-w-2xl bg-black rounded-3xl overflow-hidden shadow-2xl border border-gray-800 aspect-[3/4] md:aspect-video">
-              <Webcam
-                audio={false}
-                ref={webcamRef}
-                screenshotFormat="image/jpeg"
-                videoConstraints={videoConstraints}
-                className="absolute inset-0 w-full h-full object-cover"
-              />
-              {/* Overlay Guide */}
-              <div className="absolute inset-0 border-[40px] border-black/40 flex items-center justify-center pointer-events-none">
-                  <div className="border-2 border-white/50 w-3/4 h-1/2 rounded-xl"></div>
-              </div>
-              {/* Close Button */}
-              <button onClick={() => setIsCameraOpen(false)} className="absolute top-4 right-4 p-2 bg-black/50 text-white rounded-full hover:bg-black/80 backdrop-blur-md z-10">
-                <X size={24} />
-              </button>
-            </div>
-            
-            <div className="mt-8 flex items-center gap-8">
-              <button onClick={capture} className="w-20 h-20 bg-white rounded-full border-4 border-gray-400 flex items-center justify-center active:scale-95 transition-transform hover:border-white shadow-xl shadow-white/10">
-                <div className="w-16 h-16 rounded-full bg-blue-600"></div>
-              </button>
-            </div>
-            <p className="text-white mt-4 font-medium">Take a photo of the nutrition label</p>
-          </div>
-        )}
-
-        {/* === MAIN CONTENT === */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
-
-          {/* --- HERO SECTION --- */}
-          {!image && !result && (
-            <div className="flex flex-col md:flex-row items-center justify-center min-h-[60vh] gap-12 animate-in slide-in-from-bottom-5 duration-500">
-              
-              <div className="flex-1 text-center md:text-left space-y-6 max-w-lg">
-                <div className="inline-flex items-center gap-2 bg-blue-50 text-blue-700 px-4 py-2 rounded-full text-sm font-bold mb-2">
-                  <ShieldCheck size={16} />
-                  AI Food Safety Assistant
-                </div>
-                <h2 className="text-4xl md:text-6xl font-black text-gray-900 tracking-tight leading-tight">
-                  Scan Once,<br/>
-                  <span className="text-blue-600">Know Everything.</span>
-                </h2>
-                <p className="text-lg text-gray-500 leading-relaxed">
-                  Check Halal status, detect hidden Allergens, and calculate sugar in seconds using Gemini AI.
-                </p>
-                
-                <div className="flex flex-col sm:flex-row gap-4 pt-4">
-                    <button 
-                      onClick={() => setIsCameraOpen(true)}
-                      className="flex-1 bg-blue-600 text-white font-bold py-4 px-8 rounded-2xl shadow-xl shadow-blue-200 hover:bg-blue-700 hover:shadow-2xl hover:-translate-y-1 transition-all flex items-center justify-center gap-3"
-                    >
-                      <Camera size={24} /> Open Camera
-                    </button>
-                    <button 
-                      onClick={() => fileInputRef.current?.click()}
-                      className="flex-1 bg-white text-gray-700 font-bold py-4 px-8 rounded-2xl border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all flex items-center justify-center gap-3"
-                    >
-                      <ImageIcon size={24} /> Upload File
-                    </button>
-                </div>
-              </div>
-
-              {/* Illustration */}
-              <div className="flex-1 flex justify-center md:justify-end opacity-80 md:opacity-100">
-                <div className="relative w-64 h-64 md:w-80 md:h-80 bg-gradient-to-tr from-blue-100 to-purple-50 rounded-full flex items-center justify-center animate-pulse-slow shadow-2xl shadow-blue-100">
-                    <div className="relative">
-                      <div className="absolute inset-0 bg-blue-500 blur-3xl opacity-20 rounded-full"></div>
-                      <ScanBarcode 
-                        size={140} 
-                        className="text-blue-600 relative z-10 drop-shadow-sm" 
-                        strokeWidth={1.5}
-                      />
-                    </div>
-                    
-                    <div className="absolute top-10 right-10 bg-white p-3 rounded-2xl shadow-lg animate-bounce duration-1000">
-                      <ShieldCheck size={24} className="text-emerald-500" />
-                    </div>
-                    <div className="absolute bottom-10 left-10 bg-white p-3 rounded-2xl shadow-lg animate-bounce duration-1000 delay-500">
-                      <Zap size={24} className="text-orange-500" />
-                    </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* --- ANALYSIS DASHBOARD --- */}
-          {(image || result) && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 animate-in fade-in duration-500">
-              
-              {/* Left Column: Image Preview */}
-              <div className="lg:col-span-5 xl:col-span-4">
-                <div className="lg:sticky lg:top-28 space-y-4">
-                  <div className="relative rounded-3xl overflow-hidden shadow-2xl border border-gray-200 bg-gray-100 group">
-                    <Image 
-                      src={image!} 
-                      alt="Preview" 
-                      width={0}
-                      height={0}
-                      sizes="100vw"
-                      className="w-full h-auto object-contain max-h-[500px]"
-                      unoptimized
-                    />
-                    
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4 backdrop-blur-sm">
-                      <button onClick={() => setImage(null)} className="p-3 bg-white/20 text-white rounded-full hover:bg-white/40 backdrop-blur-md border border-white/50">
-                          <X size={24} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {!result && (
-                    <button 
-                      onClick={analyzeImage} 
-                      disabled={loading} 
-                      className="w-full bg-blue-600 text-white font-bold py-5 rounded-2xl shadow-xl hover:bg-blue-700 transition-all disabled:opacity-70 disabled:cursor-wait flex items-center justify-center gap-3 text-lg"
-                    >
-                      {loading ? <Loader2 className="animate-spin" /> : <Zap size={24} fill="currentColor" />}
-                      {loading ? "Analyzing..." : "Start Analysis"}
-                    </button>
-                  )}
-
-                  {result && (
-                    <button 
-                      onClick={handleReset}
-                      className="w-full bg-white text-gray-900 font-bold py-4 rounded-xl shadow-sm border border-gray-200 active:scale-95 transition-all flex items-center justify-center gap-2 mt-6 hover:bg-gray-50"
-                    >
-                      <RefreshCw size={20} />
-                      Scan Another Product
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Right Column: Results */}
-              <div className="lg:col-span-7 xl:col-span-8 space-y-6 pb-20">
-                {loading && (
-                    <div className="flex flex-col items-center justify-center h-64 text-gray-400 space-y-4">
-                      <Loader2 size={48} className="animate-spin text-blue-600" />
-                      <p className="font-medium animate-pulse">Reading nutrition label...</p>
-                    </div>
-                )}
-
-                {result && (
-                  <>
-                    {/* Header Card */}
-                    <div className="bg-white rounded-[2rem] p-6 md:p-8 shadow-xl border border-blue-50 relative overflow-hidden">
-                        <div className="absolute top-0 right-0 w-64 h-64 bg-blue-50 rounded-full blur-3xl -mr-16 -mt-16 opacity-50 pointer-events-none"></div>
-                        
-                        <div className="relative z-10">
-                          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-4">
-                              <h2 className="text-3xl md:text-4xl font-black text-gray-900 leading-tight">
-                                {result.product_name || "Product Detected"}
-                              </h2>
-                              <div className={`self-start px-4 py-2 rounded-xl text-sm font-bold border shadow-sm ${
-                                  result.health_score > 70 ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
-                                  result.health_score > 40 ? "bg-orange-50 text-orange-700 border-orange-200" :
-                                  "bg-red-50 text-red-700 border-red-200"
-                              }`}>
-                                  Health Score: <span className="text-lg">{result.health_score}</span>/100
-                              </div>
-                          </div>
-                          <p className="text-gray-600 text-base md:text-lg leading-relaxed border-l-4 border-blue-200 pl-4">
-                            {result.brief_conclusion}
-                          </p>
-                        </div>
-                    </div>
-
-                    {/* Three Pillars */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {/* Halal */}
-                        <div className={`p-5 rounded-2xl border flex flex-row md:flex-col items-center gap-4 md:gap-2 md:text-center shadow-sm transition-transform hover:scale-[1.02] ${
-                            result.halal_analysis.status === "Halal Safe" ? "bg-emerald-50 border-emerald-100" :
-                            result.halal_analysis.status.includes("Syubhat") ? "bg-yellow-50 border-yellow-100" : "bg-red-50 border-red-100"
-                        }`}>
-                            <div className="bg-white/50 p-3 rounded-full">
-                              <ShieldCheck size={28} className={
-                                  result.halal_analysis.status === "Halal Safe" ? "text-emerald-600" :
-                                  result.halal_analysis.status.includes("Syubhat") ? "text-yellow-600" : "text-red-600"
-                              } />
-                            </div>
-                            <div>
-                              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Halal Status</p>
-                              <p className="font-bold text-lg text-gray-900">
-                                  {result.halal_analysis.status === "Halal Safe" ? "Safe" : 
-                                  result.halal_analysis.status.includes("Syubhat") ? "Syubhat" : "Non-Halal"}
-                              </p>
-                            </div>
-                        </div>
-
-                        {/* Allergen */}
-                        <div className={`p-5 rounded-2xl border flex flex-row md:flex-col items-center gap-4 md:gap-2 md:text-center shadow-sm transition-transform hover:scale-[1.02] ${
-                            result.allergen_list.length === 0 ? "bg-blue-50 border-blue-100" : "bg-red-50 border-red-100"
-                        }`}>
-                            <div className="bg-white/50 p-3 rounded-full">
-                              <Biohazard size={28} className={result.allergen_list.length === 0 ? "text-blue-600" : "text-red-600"} />
-                            </div>
-                            <div>
-                              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Allergens</p>
-                              <p className="font-bold text-lg text-gray-900">
-                                  {result.allergen_list.length === 0 ? "0 Found" : `${result.allergen_list.length} Items`}
-                              </p>
-                            </div>
-                        </div>
-
-                        {/* Sugar */}
-                        <div className="p-5 rounded-2xl border bg-white border-gray-100 flex flex-row md:flex-col items-center gap-4 md:gap-2 md:text-center shadow-sm transition-transform hover:scale-[1.02]">
-                            <div className="bg-blue-50 p-3 rounded-full text-blue-600 font-black text-lg">
-                              {result.nutrition_summary.sugar_g}g
-                            </div>
-                            <div>
-                              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Total Sugar</p>
-                              <p className="font-bold text-lg text-gray-900">≈ {result.nutrition_summary.sugar_teaspoons} tsp</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Detailed Alerts */}
-                    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-                        <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
-                          <h3 className="font-bold text-gray-800 flex items-center gap-2">
-                            <AlertTriangle size={18} className="text-orange-500" /> 
-                            Deep Analysis
-                          </h3>
-                        </div>
-                        
-                        <div className="divide-y divide-gray-100">
-                          {result.halal_analysis.status !== "Halal Safe" && (
-                              <div className="p-5 bg-red-50/30 flex gap-4">
-                                <div className="shrink-0 mt-1"><ShieldCheck size={20} className="text-red-500"/></div>
-                                <div>
-                                    <h4 className="font-bold text-red-700 text-sm">Halal Issues</h4>
-                                    <p className="text-sm text-gray-600 mt-1">{result.halal_analysis.reason}</p>
-                                </div>
-                              </div>
-                          )}
-
-                          {result.allergen_list.length > 0 && (
-                              <div className="p-5 bg-orange-50/30 flex gap-4">
-                                <div className="shrink-0 mt-1"><Biohazard size={20} className="text-orange-500"/></div>
-                                <div>
-                                    <h4 className="font-bold text-orange-700 text-sm">Allergens Detected</h4>
-                                    <p className="text-sm text-gray-600 mt-1">Contains: <b>{result.allergen_list.join(", ")}</b></p>
-                                </div>
-                              </div>
-                          )}
-
-                          {result.alerts.map((item, idx) => (
-                              <div key={idx} className="p-5 hover:bg-gray-50 transition-colors">
-                                <div className="flex justify-between items-start mb-2">
-                                    <span className="font-bold text-gray-900">{item.name}</span>
-                                    <span className={`text-[10px] px-2 py-1 rounded font-bold uppercase tracking-wide border ${
-                                        item.category === "Halal" ? "bg-purple-50 text-purple-700 border-purple-200" :
-                                        item.category === "Allergy" ? "bg-orange-50 text-orange-700 border-orange-200" :
-                                        "bg-blue-50 text-blue-700 border-blue-200"
-                                    }`}>
-                                        {item.category}
-                                    </span>
-                                </div>
-                                <p className="text-sm text-gray-600 leading-relaxed">{item.risk}</p>
-                              </div>
-                          ))}
-
-                          {result.alerts.length === 0 && result.halal_analysis.status === "Halal Safe" && (
-                              <div className="p-10 text-center">
-                                <ShieldCheck size={48} className="mx-auto text-emerald-200 mb-3" />
-                                <p className="font-medium text-gray-400">No harmful ingredients found.</p>
-                              </div>
-                          )}
-                        </div>
-                    </div>
-
-                    {/* Verification Accordion */}
-                    <div className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm">
-                        <button 
-                          onClick={() => setShowIngredients(!showIngredients)}
-                          className="w-full flex justify-between items-center px-6 py-4 bg-gray-50 hover:bg-gray-100 transition-colors"
-                        >
-                          <div className="flex items-center gap-3 text-gray-700 font-semibold">
-                              <Search size={18} />
-                              <span>Verify Read Results (OCR)</span>
-                          </div>
-                          {showIngredients ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                        </button>
-                        
-                        {showIngredients && (
-                          <div className="p-6 bg-white border-t border-gray-200 animate-in slide-in-from-top-2">
-                              <p className="text-xs text-gray-400 mb-3">
-                                *Ensure the text below matches the physical label for accurate analysis.
-                              </p>
-                              <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 text-xs font-mono text-gray-600 whitespace-pre-wrap break-words leading-relaxed">
-                                {result.detected_ingredients_text || "No text detected."}
-                              </div>
-                          </div>
-                        )}
-                    </div>
-
-                    {/* --- CHATBOT SECTION --- */}
-                    <div className="bg-white rounded-2xl border border-blue-100 shadow-lg overflow-hidden mt-6">
-                      <div className="bg-blue-600 px-6 py-4 flex items-center gap-2">
-                        <div className="bg-white/20 p-1.5 rounded-lg">
-                            <Zap size={18} className="text-white" fill="currentColor" />
-                        </div>
-                        <div>
-                            <h3 className="font-bold text-white text-sm">Ask NutriSift</h3>
-                            <p className="text-[10px] text-blue-100">AI Consultant for this product</p>
-                        </div>
-                      </div>
-
-                      <div className="p-4 bg-gray-50/50 min-h-[200px] max-h-[400px] overflow-y-auto space-y-4">
-                        {/* Welcome Message */}
-                        {chatMessages.length === 0 && (
-                            <div className="text-center text-gray-400 text-xs py-4">
-                              <p>Curious? Try asking:</p>
-                              <div className="flex flex-wrap justify-center gap-2 mt-3">
-                                  <button onClick={() => setChatInput("Safe for pregnancy?")} className="px-3 py-1 bg-white border border-gray-200 rounded-full hover:bg-blue-50 transition-colors">🤰 Pregnancy safe?</button>
-                                  <button onClick={() => setChatInput("Is this keto friendly?")} className="px-3 py-1 bg-white border border-gray-200 rounded-full hover:bg-blue-50 transition-colors">🥑 Keto friendly?</button>
-                                  <button onClick={() => setChatInput("Why is the score low?")} className="px-3 py-1 bg-white border border-gray-200 rounded-full hover:bg-blue-50 transition-colors">📉 Why low score?</button>
-                              </div>
-                            </div>
-                        )}
-
-                        {/* Chat List */}
-                        {chatMessages.map((msg, idx) => (
-                            <div key={idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                              <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-                                  msg.role === "user" 
-                                    ? "bg-blue-600 text-white rounded-br-none" 
-                                    : "bg-white border border-gray-200 text-gray-700 rounded-bl-none shadow-sm"
-                              }`}>
-                                  {msg.content}
-                              </div>
-                            </div>
-                        ))}
-                        
-                        {/* Loading Indicator */}
-                        {chatLoading && (
-                            <div className="flex justify-start">
-                              <div className="bg-white border border-gray-200 px-4 py-3 rounded-2xl rounded-bl-none shadow-sm flex gap-1 items-center">
-                                  <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"></div>
-                                  <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce delay-75"></div>
-                                  <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce delay-150"></div>
-                              </div>
-                            </div>
-                        )}
-                        <div ref={chatEndRef}></div>
-                      </div>
-
-                      {/* Input Area */}
-                      <div className="p-3 bg-white border-t border-gray-100 flex gap-2">
-                        <input 
-                            type="text" 
-                            value={chatInput}
-                            onChange={(e) => setChatInput(e.target.value)}
-                            onKeyDown={(e) => e.key === "Enter" && handleSendChat()}
-                            placeholder="Type your question..."
-                            className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
-                        />
-                        <button 
-                            onClick={handleSendChat}
-                            disabled={chatLoading || !chatInput.trim()}
-                            className="bg-blue-600 text-white p-3 rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >
-                            <Zap size={20} />
-                        </button>
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-
-            </div>
-          )}
-
-          {/* Hidden Input */}
-          <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
-
+          <span className="font-bold text-2xl tracking-tight text-forest-900">NutriSift AI</span>
         </div>
-      </main>
-    );
+        
+        <div className="hidden md:flex items-center gap-8">
+          <span className="text-sm font-semibold text-forest-600 flex items-center gap-2">
+              <Sprout size={16} fill="currentColor"/> 
+              Powered by Gemini 2.5
+          </span>
+          <Link href="/scan" className="bg-forest-900 text-white px-8 py-3 rounded-full font-bold text-sm hover:bg-forest-800 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300">
+            Scan Now
+          </Link>
+        </div>
+      </nav>
+
+      <div className="w-full max-w-7xl mx-auto px-6 md:px-12 lg:px-20 pt-32 lg:pt-48 pb-20">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 lg:gap-24 items-start">
+          
+          <div className="space-y-10 py-4 lg:sticky lg:top-40">
+            
+            <div className="inline-flex items-center gap-3 bg-white text-forest-700 px-5 py-2.5 rounded-full text-xs font-bold uppercase tracking-wider border border-forest-200 shadow-sm">
+              <ShieldCheck size={16} />
+              <span>AI Food Safety Assistant</span>
+            </div>
+            
+            <h1 className="text-6xl lg:text-8xl font-black leading-[1.05] tracking-tight text-forest-900">
+              Eat Clean.<br />
+              <span className="text-transparent bg-clip-text bg-linear-to-r from-forest-600 to-forest-400">
+                Live Green.
+              </span>
+            </h1>
+            
+            <p className="text-xl text-forest-700/80 leading-relaxed font-medium max-w-xl">
+              Decode nutrition labels instantly. We use advanced AI to detect hidden allergens, verify Halal status, and visualize sugar impact naturally.
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-5 pt-4">
+              <Link href="/scan" className="group bg-forest-600 text-white font-bold py-5 px-10 rounded-2xl shadow-xl shadow-forest-200 hover:bg-forest-700 hover:shadow-2xl hover:-translate-y-1 active:scale-95 transition-all duration-300 flex items-center justify-center gap-4 text-xl">
+                  <Camera size={26} />
+                  Start Scanning
+                  <ArrowRight size={22} className="opacity-70 group-hover:translate-x-2 transition-transform duration-300"/>
+              </Link>
+              
+              <a href="#how-it-works" className="group px-8 py-5 rounded-2xl font-bold text-forest-700 hover:bg-white hover:shadow-lg border border-transparent hover:border-forest-100 transition-all duration-300 flex items-center justify-center gap-2">
+                  How it works
+              </a>
+            </div>
+
+            <div className="pt-10 border-t border-forest-200/60 flex flex-wrap gap-x-8 gap-y-4 text-sm font-bold text-forest-500">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 size={20} className="text-forest-600"/> No Sign-up Required
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 size={20} className="text-forest-600"/> Instant AI Results
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 size={20} className="text-forest-600"/> 100% Free
+                </div>
+            </div>
+          </div>
+
+          <div className="relative w-full aspect-square lg:aspect-auto lg:h-200 flex items-start justify-center pt-10 lg:pt-0">
+              
+              <div className="relative z-10 bg-white/40 backdrop-blur-2xl border border-white/60 p-8 md:p-12 rounded-4xl shadow-[0_30px_80px_-20px_rgba(47,79,47,0.15)] flex items-center justify-center w-full max-w-lg aspect-4/5">
+                <div className="relative w-full h-full flex flex-col items-center justify-center">
+                    
+                    <div className="bg-white p-10 rounded-4xl shadow-2xl shadow-forest-100 mb-12 transform hover:scale-105 transition-transform duration-700">
+                        <ScanBarcode size={140} className="text-forest-600" strokeWidth={1.2}/>
+                    </div>
+                    
+                    <div className="absolute top-12 right-0 lg:-right-8 bg-white p-5 rounded-3xl shadow-xl shadow-forest-200/50 border border-forest-50 animate-bounce duration-3000">
+                      <div className="flex items-center gap-4 mb-3">
+                          <div className="p-3 bg-forest-100 text-forest-700 rounded-2xl">
+                            <ShieldCheck size={24}/>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-forest-400 font-bold uppercase tracking-wider">Analysis</p>
+                            <p className="text-base font-bold text-forest-900">Halal Safe</p>
+                          </div>
+                      </div>
+                      <div className="w-32 h-2 bg-forest-50 rounded-full overflow-hidden">
+                          <div className="w-full h-full bg-forest-500 rounded-full"></div>
+                      </div>
+                    </div>
+
+                    <div className="absolute bottom-24 left-0 lg:-left-8 bg-white p-5 rounded-3xl shadow-xl shadow-forest-200/50 border border-forest-50 animate-bounce duration-4000 delay-500">
+                      <div className="flex items-center gap-4">
+                          <div className="p-3 bg-orange-100 text-orange-600 rounded-2xl">
+                            <Activity size={24}/>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Sugar Level</p>
+                            <p className="text-base font-bold text-gray-900">High (24g)</p>
+                          </div>
+                      </div>
+                    </div>
+
+                    <div className="absolute top-1/2 -right-4 lg:-right-16 bg-white/90 backdrop-blur-md px-5 py-3 rounded-2xl shadow-lg border border-forest-100 flex items-center gap-3 animate-pulse">
+                      <Search size={18} className="text-forest-500"/>
+                      <span className="text-xs font-bold text-forest-700">Scanning Ingredients...</span>
+                    </div>
+
+                </div>
+              </div>
+          </div>
+        </div>
+      </div>
+
+      <section id="how-it-works" className="w-full bg-white py-24 relative z-10 rounded-t-4xl shadow-[0_-20px_60px_-15px_rgba(0,0,0,0.05)]">
+          <div className="max-w-7xl mx-auto px-6 md:px-12 lg:px-20">
+            
+            <div className="text-center mb-20 max-w-2xl mx-auto">
+                <span className="text-forest-600 font-bold text-sm uppercase tracking-widest bg-forest-50 px-4 py-2 rounded-full">Simple Process</span>
+                <h2 className="text-4xl md:text-5xl font-black text-forest-900 mt-6 mb-6">How NutriSift Works</h2>
+                <p className="text-forest-700/70 text-lg">Three simple steps to understand what&apos;s really inside your packaged food.</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+                <div className="bg-forest-50 p-8 rounded-4xl flex flex-col items-center text-center group hover:-translate-y-2 transition-transform duration-500 border border-transparent hover:border-forest-200">
+                  <div className="w-24 h-24 bg-white text-forest-600 rounded-3xl flex items-center justify-center mb-8 shadow-sm group-hover:shadow-md transition-shadow duration-500">
+                      <Camera size={48} strokeWidth={1.5} />
+                  </div>
+                  <h3 className="text-2xl font-bold text-forest-900 mb-4">1. Snap a Photo</h3>
+                  <p className="text-forest-700/80 leading-relaxed">Take a clear picture of the ingredients list or nutrition facts label on the packaging.</p>
+                </div>
+
+                <div className="bg-forest-50 p-8 rounded-4xl flex flex-col items-center text-center group hover:-translate-y-2 transition-transform duration-500 border border-transparent hover:border-forest-200 relative">
+                  <div className="hidden md:block absolute top-1/2 -left-6 lg:-left-9 transform -translate-y-1/2 text-forest-200 z-10">
+                      <ArrowRight size={40} />
+                  </div>
+                  <div className="w-24 h-24 bg-white text-forest-600 rounded-3xl flex items-center justify-center mb-8 shadow-sm group-hover:shadow-md transition-shadow duration-500">
+                      <Zap size={48} strokeWidth={1.5} fill="currentColor"/>
+                  </div>
+                  <h3 className="text-2xl font-bold text-forest-900 mb-4">2. AI Analysis</h3>
+                  <p className="text-forest-700/80 leading-relaxed">Gemini AI reads the text, cross-references additives, and calculates safety scores instantly.</p>
+                </div>
+
+                <div className="bg-forest-50 p-8 rounded-4xl flex flex-col items-center text-center group hover:-translate-y-2 transition-transform duration-500 border border-transparent hover:border-forest-200 relative">
+                  <div className="hidden md:block absolute top-1/2 -left-6 lg:-left-9 transform -translate-y-1/2 text-forest-200 z-10">
+                      <ArrowRight size={40} />
+                  </div>
+                  <div className="w-24 h-24 bg-white text-forest-600 rounded-3xl flex items-center justify-center mb-8 shadow-sm group-hover:shadow-md transition-shadow duration-500">
+                      <ShieldCheck size={48} strokeWidth={1.5} />
+                  </div>
+                  <h3 className="text-2xl font-bold text-forest-900 mb-4">3. Get Insights</h3>
+                  <p className="text-forest-700/80 leading-relaxed">See Halal status, allergen alerts, and visualize sugar content in a clear dashboard.</p>
+                </div>
+            </div>
+
+            <div className="mt-20 bg-yellow-50 border border-yellow-100 rounded-4xl p-8 flex flex-col md:flex-row items-start md:items-center gap-6 max-w-4xl mx-auto shadow-sm">
+                <div className="p-4 bg-yellow-100 text-yellow-700 rounded-full shrink-0">
+                    <AlertTriangle size={32} />
+                </div>
+                <div>
+                    <h4 className="font-bold text-yellow-900 text-xl mb-2">Important Disclaimer</h4>
+                    <p className="text-yellow-800/80 leading-relaxed">
+                        NutriSift AI is an assistive tool powered by artificial intelligence. While highly accurate, <strong>AI models can occasionally misinterpret text</strong> due to blur or lighting. 
+                        Always verify critical information (especially for severe allergies) with the physical product label.
+                    </p>
+                </div>
+            </div>
+
+          </div>
+      </section>
+
+    </main>
+  );
 }
