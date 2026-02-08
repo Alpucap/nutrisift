@@ -1,1 +1,31 @@
 @import "tailwindcss";
+
+@theme {
+    /* --- FOREST PALETTE --- */
+    --color-forest-50: #F9FAF6; 
+    --color-forest-100: #FFFBB1; 
+    --color-forest-200: #E6F0C2;
+    --color-forest-300: #D8E983; 
+    --color-forest-400: #A5C89E;
+    --color-forest-500: #AEB877;
+    --color-forest-600: #6B8E23;
+    --color-forest-700: #556B2F;
+    --color-forest-800: #3A4F3A;
+    --color-forest-900: #1A2F1A;
+
+    --animate-scan: scan 2.5s ease-in-out infinite;
+    
+    @keyframes scan {
+        0% { transform: translateY(-100%); opacity: 0; }
+        10% { opacity: 1; }
+        90% { opacity: 1; }
+        100% { transform: translateY(400px); opacity: 0; }
+    }
+}
+
+html,
+body {
+    max-width: 100vw;
+    overflow-x: hidden;
+    scroll-behavior: smooth;
+}
