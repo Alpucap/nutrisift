@@ -1,111 +1,197 @@
-import { GoogleGenerativeAI, Tool } from "@google/generative-ai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 
-type ExtendedTool = Tool & {
-    googleSearch?: object;
-};
+export const maxDuration = 60; 
+export const dynamic = 'force-dynamic';
+
+const MODEL_NAME = "gemini-2.5-flash"; 
+const TEMPERATURE_STRICT = 0.0; 
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+
+interface Alert {
+    name: string;
+    category: "Health" | "Halal" | "Allergy";
+    risk: string;
+    severity: "Low" | "Medium" | "High";
+}
+
+interface AnalysisResponse {
+    _agent_reasoning: {
+        ocr_agent: string;
+        halal_agent: string;
+        health_agent: string;
+        final_verdict: string;
+    };
+    product_name: string;
+    detected_ingredients_text: string;
+    health_score: number;
+    halal_analysis: {
+        status: "Halal Safe" | "Syubhat (Doubtful)" | "Non-Halal";
+        reason: string;
+    };
+    allergen_list: string[];
+    nutrition_summary: {
+        sugar_g: number;
+        sugar_teaspoons: number;
+    };
+    alerts: Alert[];
+    healthy_alternatives: {
+        name: string;
+        reason: string;
+    }[];
+    brief_conclusion: string;
+}
+
+function extractAndParseJSON(rawText: string) {
+    try {
+        return JSON.parse(rawText);
+    } catch {
+        const match = rawText.match(/```json([\s\S]*?)```/);
+        if (match) {
+        return JSON.parse(match[1]);
+        }
+        const firstOpen = rawText.indexOf('{');
+        const lastClose = rawText.lastIndexOf('}');
+        if (firstOpen !== -1 && lastClose !== -1) {
+        return JSON.parse(rawText.substring(firstOpen, lastClose + 1));
+        }
+        throw new Error("Deep Learning Model output malformed JSON.");
+    }
+}
 
 export async function POST(req: Request) {
     try {
         const { image } = await req.json();
 
-        if (!image) {
-            return NextResponse.json({ error: "No image provided" }, { status: 400 });
-        }
+        if (!image) return NextResponse.json({ error: "No input tensor detected" }, { status: 400 });
 
-        const model = genAI.getGenerativeModel({
-            model: "gemini-2.5-flash", 
-            tools: [{ googleSearch: {} } as ExtendedTool],
-        });
-
-        const generationConfig = {
-            temperature: 0.2, 
-            maxOutputTokens: 3000, 
-        };
+        const model = genAI.getGenerativeModel({ model: MODEL_NAME });
 
         const prompt = `
-        You are NutriSift AI, a comprehensive Food Safety Expert.
+        SYSTEM: ACTIVATE MULTI-AGENT MIXTURE OF EXPERTS (MoE) PROTOCOL.
+        TARGET: FOOD SAFETY & HALAL FORENSICS (INDONESIA REGION).
+
+        --- PHASE 1: KNOWLEDGE INJECTION (READ-ONLY MEMORY) ---
+        [HALAL DATABASE - MUI FATWA 33/2011]
+        - E120 (Karmin/Cochineal): STATUS = HALAL.
+        - Ethanol: HALAL if <0.5% & non-intoxicating industry.
+        - Rum/Mirin/Wine: STATUS = HARAM.
+        - E471/Gelatin/L-Cysteine: STATUS = SYUBHAT (Requires 'Bovine'/'Plant' descriptor or Halal Logo).
         
-        TASK:
-        Analyze the food packaging image extensively.
-        
-        STEPS:
-        1. OCR: Read the full ingredient list and nutrition facts accurately.
-        2. HALAL CHECK: Identify non-halal ingredients (Pork, Alcohol, Rum, Mirin) and doubtful E-codes (E120, E471, E441). Use Google Search to verify sources.
-        3. ALLERGY CHECK: Identify common allergens (Peanuts, Dairy, Soy, Gluten, Shellfish, etc).
-        4. HEALTH CHECK: Evaluate sugar, sodium, and dangerous preservatives.
-        
-        CRITICAL INSTRUCTION:
-        Output ONLY a valid JSON object.
-        
-        JSON SCHEMA:
+        [NUTRITION VECTORS]
+        - SUGAR_RISK_THRESHOLD: >22.5g/100g.
+        - ANOMALY_DETECTION_RULE: IF ingredients=["Sugar","Syrup","Cane","Choco"] AND nutrition_sugar=0 THEN FLAG_ERROR="TRUE".
+
+        --- PHASE 2: AGENT EXECUTION TASKS ---
+        You must emulate the following agents sequentially:
+
+        🕵️ [AGENT A: VISUAL EXTRACTOR]
+        - Perform OCR on the image. Handle curvature, glare, and blurry text.
+        - Detect "Halal Indonesia" or "MUI" logos.
+        - Output: Raw Text & Visual Tags.
+
+        🔬 [AGENT B: SHARIA AUDITOR]
+        - Input: Agent A's text.
+        - Logic: Match ingredients against [HALAL DATABASE].
+        - Override: If Agent A found a Halal Logo, all 'SYUBHAT' ingredients become 'HALAL SAFE'.
+
+        🩺 [AGENT C: NUTRITIONIST]
+        - Input: Agent A's text.
+        - Logic: Calculate Sugar metrics. 
+        - Task: Generate "Smart Swaps" (Generic healthy alternatives). 
+        Example: If "Potato Chips" -> Suggest "Baked Veggie Chips" or "Air-Popped Popcorn".
+
+        ⚖️ [AGENT D: THE JUDGE (META-REASONING)]
+        - Compare findings from A, B, and C.
+        - DETECT ANOMALIES: Does the text say "Chocolate" but Agent C says "0g Sugar"? If yes, issue a CRITICAL WARNING.
+        - Finalize the Safety Score (0-100).
+
+        --- PHASE 3: FINAL OUTPUT TENSOR (JSON ONLY) ---
+        Return ONLY this JSON structure. No preamble.
+
         {
-            "product_name": "string",
-            "detected_ingredients_text": "string (The full raw text of ingredients you read from the image)",
-            "health_score": number (0-100),
-            
-            "halal_analysis": {
-                "status": "Halal Safe" | "Syubhat (Doubtful)" | "Non-Halal",
-                "reason": "string (Why? e.g. 'Contains Pork' or 'E471 might be animal-derived')"
-            },
-            
-            "allergen_list": ["string (List of allergens found, e.g. 'Milk', 'Soy')"],
-            
-            "nutrition_summary": {
-                "sugar_g": number,
-                "sugar_teaspoons": number
-            },
-            
-            "alerts": [
-                { 
-                    "name": "string (Ingredient Name)", 
-                    "category": "Health" | "Halal" | "Allergy", 
-                    "risk": "string (Explanation)",
-                    "severity": "Low" | "Medium" | "High"
-                }
-            ],
-            
-            "brief_conclusion": "string (A holistic summary considering health, halal, and allergies)"
+        "meta_agent_logs": {
+            "visual_agent": "string (What Agent A saw)",
+            "audit_agent": "string (Agent B's reasoning regarding E120/Pork/etc)",
+            "anomaly_check": "string (Agent D's verdict on data consistency)"
+        },
+        "product_name": "string",
+        "detected_ingredients_text": "string",
+        "health_score": number,
+        "halal_analysis": {
+            "status": "Halal Safe" | "Syubhat (Doubtful)" | "Non-Halal",
+            "reason": "string"
+        },
+        "allergen_list": ["string"],
+        "nutrition_summary": {
+            "sugar_g": number,
+            "sugar_teaspoons": number
+        },
+        "alerts": [
+            { "name": "string", "category": "Health"|"Halal"|"Allergy", "risk": "string", "severity": "High"|"Medium"|"Low" }
+        ],
+        "healthy_alternatives": [
+            { "name": "string", "reason": "string" }
+        ],
+        "brief_conclusion": "string"
         }
         `;
 
-        const base64Data = image.split(",")[1] || image;
+        const base64Data = image.includes("base64,") ? image.split(",")[1] : image;
         
-        const imagePart = {
-            inlineData: {
-                data: base64Data,
-                mimeType: "image/jpeg",
-            },
-        };
-
         const result = await model.generateContent({
-            contents: [{ role: "user", parts: [{ text: prompt }, imagePart] }],
-            generationConfig,
+        contents: [{ role: "user", parts: [{ text: prompt }, { inlineData: { data: base64Data, mimeType: "image/jpeg" } }] }],
+        generationConfig: {
+            temperature: TEMPERATURE_STRICT,
+            maxOutputTokens: 8192,
+        },
         });
 
-        const { response } = result;
-        const rawText = response.text();
-        console.log("Raw AI Response:", rawText); 
-
-        const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+        const responseText = result.response.text();
+        const data: AnalysisResponse = extractAndParseJSON(responseText);
         
-        if (!jsonMatch) {
-            throw new Error("No JSON found in response");
+        const sugarKeywords = ["sugar", "gula", "syrup", "sirup", "chocolate", "coklat", "candy", "permen", "sweet"];
+        const textLower = (data.detected_ingredients_text + data.product_name).toLowerCase();
+        
+        if (data.nutrition_summary.sugar_g === 0) {
+        const suspicious = sugarKeywords.some(k => textLower.includes(k));
+        if (suspicious) {
+            data.health_score = Math.min(data.health_score, 30);
+            data.brief_conclusion = "CRITICAL WARNING: Data Mismatch. Product likely contains sugar despite 0g reading.";
+            data.alerts.unshift({
+            name: "Anomaly Detected",
+            category: "Health",
+            risk: "AI detected 0g sugar but ingredients suggest otherwise. Verify physical label.",
+            severity: "High"
+            });
+        }
         }
 
-        const cleanJson = jsonMatch[0];
-        const parsedData = JSON.parse(cleanJson);
+        if (data.halal_analysis.status === "Non-Halal" && data.health_score > 50) {
+        data.health_score = 50; 
+        }
 
-        return NextResponse.json(parsedData);
+        return NextResponse.json(data);
 
-    } catch (error) {
-        console.error("Analysis Error:", error);
+    } catch (error: unknown) {
+        console.error("SYSTEM FAILURE:", error);
+        
+        let errorMessage = "Neural Network Error";
+        if (error instanceof Error) {
+            if (error.message.includes("404")) {
+                errorMessage = "Model Gemini not found. Check API Key.";
+            } else {
+                errorMessage = "Failed to process visual data. Ensure image clarity.";
+            }
+        }
+
         return NextResponse.json(
-            { error: "Failed to process data. Please try again." },
-            { status: 500 }
+        { 
+            error: errorMessage, 
+            details: error instanceof Error ? error.message : String(error)
+        }, 
+        { status: 500 }
         );
     }
 }
-

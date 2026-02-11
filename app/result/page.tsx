@@ -6,7 +6,8 @@ import Image from "next/image";
 import { 
     ShieldCheck, Biohazard, 
     RefreshCw, ArrowLeft, Info, MessageCircle, AlertTriangle, 
-    CheckCircle2, Search, ChevronDown, ChevronUp, Send, Leaf, Sprout
+    CheckCircle2, Search, ChevronDown, ChevronUp, Send, Leaf, Sprout,
+    XCircle, ArrowRight
 } from "lucide-react";
 
 interface AnalysisResult {
@@ -17,6 +18,7 @@ interface AnalysisResult {
     allergen_list: string[];
     nutrition_summary: { sugar_g: number; sugar_teaspoons: number; };
     alerts: { name: string; category: string; risk: string; severity: string; }[];
+    healthy_alternatives?: { name: string; reason: string; }[];
     brief_conclusion: string;
 }
 
@@ -26,13 +28,14 @@ export default function ResultPage() {
     const router = useRouter();
     const [image, setImage] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [result, setResult] = useState<AnalysisResult | null>(null);
-
+    
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
     const [chatInput, setChatInput] = useState("");
     const [chatLoading, setChatLoading] = useState(false);
     const chatEndRef = useRef<HTMLDivElement>(null);
-
+    
     const [showOCR, setShowOCR] = useState(false);
     const [showWarnings, setShowWarnings] = useState(true);
 
@@ -45,6 +48,8 @@ export default function ResultPage() {
         setImage(savedImage);
         
         const analyzeImage = async (imgData: string) => {
+            setLoading(true);
+            setError(null);
             try {
                 const response = await fetch("/api/analyze", {
                     method: "POST",
@@ -52,11 +57,18 @@ export default function ResultPage() {
                     body: JSON.stringify({ image: imgData }),
                 });
                 const data = await response.json();
+                
                 if (data.error) throw new Error(data.error);
+                if (!data.health_score && data.health_score !== 0) throw new Error("Incomplete analysis data.");
+                
                 setResult(data);
-            } catch (error) {
-                console.error(error);
-                alert("Analysis failed. Please try scanning again.");
+            } catch (err: unknown) {
+                let errorMessage = "Failed to analyze image. Please ensure the label is legible.";
+                if (err instanceof Error) {
+                    errorMessage = err.message;
+                }
+                console.error(err);
+                setError(errorMessage);
             } finally {
                 setLoading(false);
             }
@@ -80,8 +92,8 @@ export default function ResultPage() {
             });
             const data = await response.json();
             setChatMessages(prev => [...prev, { role: "assistant", content: data.reply }]);
-        } catch (error) {
-            console.error(error);
+        } catch (err) {
+            console.error(err); 
             setChatMessages(prev => [...prev, { role: "assistant", content: "Connection error. Please try again." }]);
         } finally {
             setChatLoading(false);
@@ -89,9 +101,33 @@ export default function ResultPage() {
         }
     };
 
+    const sugar = result?.nutrition_summary.sugar_g || 0;
+    const score = result?.health_score || 0;
+    const isSugarSuspicious = sugar === 0 && score < 50;
+
     return (
-        <main className="min-h-screen bg-forest-50 pb-20 font-sans text-forest-900">
+        <main className="min-h-screen bg-forest-50 pb-20 font-sans text-forest-900 relative">
         
+        {error && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest-900/80 backdrop-blur-sm p-4">
+                <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl animate-in zoom-in duration-300">
+                    <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <XCircle size={32} />
+                    </div>
+                    <h3 className="text-xl font-bold text-gray-900 mb-2">Scan Failed</h3>
+                    <p className="text-gray-500 text-sm mb-6 leading-relaxed">{error}</p>
+                    <div className="flex gap-3">
+                        <button 
+                            onClick={() => router.push('/scan')}
+                            className="flex-1 bg-forest-600 text-white py-3 rounded-xl font-bold hover:bg-forest-700 transition-colors"
+                        >
+                            Try Again
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
         <nav className="bg-forest-50/80 border-b border-forest-200 sticky top-0 z-30 px-4 h-16 flex items-center justify-between shadow-sm backdrop-blur-md">
             <div className="flex items-center gap-2">
                 <button 
@@ -109,7 +145,7 @@ export default function ResultPage() {
             </div>
         </nav>
 
-        <div className="max-w-7xl mx-auto px-4 mt-8 space-y-8">
+        <div className="max-w-7xl mx-auto px-4 mt-8 space-y-12">
             
             {loading && (
             <div className="flex flex-col items-center justify-center h-[70vh] text-center space-y-8 animate-pulse">
@@ -229,99 +265,150 @@ export default function ResultPage() {
                                 </div>
                             </div>
 
-                            <div className="p-5 rounded-3xl border bg-white border-forest-200 text-forest-900 flex flex-col justify-between h-full transition-all hover:scale-[1.02] duration-300">
-                                <div className="flex items-center gap-2 mb-2 text-forest-500">
-                                    <div className="w-5 h-5 border-2 border-forest-500 rounded-md"></div>
+                            <div className={`p-5 rounded-3xl border flex flex-col justify-between h-full transition-all hover:scale-[1.02] duration-300 ${
+                                isSugarSuspicious ? "bg-amber-50 border-amber-200 text-amber-900" : "bg-white border-forest-200 text-forest-900"
+                            }`}>
+                                <div className="flex items-center gap-2 mb-2 opacity-80">
+                                    <div className={`w-5 h-5 border-2 rounded-md ${isSugarSuspicious ? "border-amber-600" : "border-forest-500"}`}></div>
                                     <span className="font-bold text-sm uppercase tracking-wider">Sugar</span>
                                 </div>
                                 <div>
-                                    <span className="text-xl font-black text-forest-600">{result.nutrition_summary.sugar_g}g</span>
-                                    <p className="text-xs text-forest-500 font-medium">≈ {result.nutrition_summary.sugar_teaspoons} Teaspoons</p>
+                                    {isSugarSuspicious ? (
+                                        <>
+                                            <div className="flex items-center gap-2 mb-1 text-amber-700">
+                                                <AlertTriangle size={24} />
+                                                <span className="text-xl font-black">Verify</span>
+                                            </div>
+                                            <p className="text-xs font-bold opacity-80">Data Mismatch</p>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span className="text-3xl font-black">{result.nutrition_summary.sugar_g}g</span>
+                                            <p className="text-xs opacity-70 font-medium">≈ {result.nutrition_summary.sugar_teaspoons} Teaspoons</p>
+                                        </>
+                                    )}
                                 </div>
                             </div>
                         </div>
 
-                        <div className="bg-white rounded-3xl border border-forest-200 p-6 shadow-sm">
+                        <div className={`rounded-3xl border p-6 shadow-sm ${
+                            isSugarSuspicious ? "bg-amber-50 border-amber-200" : "bg-white border-forest-200"
+                        }`}>
                                 <div className="flex items-center justify-between mb-4">
-                                <h3 className="font-bold text-forest-800 text-sm uppercase tracking-wide flex items-center gap-2">
-                                    <div className="w-2 h-2 bg-forest-500 rounded-full"></div> Sugar Visualization
+                                <h3 className={`font-bold text-sm uppercase tracking-wide flex items-center gap-2 ${
+                                    isSugarSuspicious ? "text-amber-800" : "text-forest-800"
+                                }`}>
+                                    <div className={`w-2 h-2 rounded-full ${isSugarSuspicious ? "bg-amber-500" : "bg-forest-500"}`}></div> 
+                                    Sugar Visualization
                                 </h3>
-                                <span className="text-[10px] text-forest-500 bg-forest-50 px-2 py-1 rounded-full border border-forest-100">1 Cube ≈ 4g</span>
+                                <span className="text-[10px] opacity-60 px-2 py-1 rounded-full border bg-white/50">1 Cube ≈ 4g</span>
                                 </div>
                                 
-                                <div className="flex flex-wrap gap-3 mb-5">
-                                {Math.ceil(result.nutrition_summary.sugar_g / 4) > 0 ? (
-                                    Array.from({ length: Math.ceil(result.nutrition_summary.sugar_g / 4) }).map((_, i) => (
-                                    <div key={i} className="w-10 h-10 bg-forest-50 border border-forest-200 rounded-xl flex items-center justify-center shadow-sm animate-in zoom-in duration-300" style={{ animationDelay: `${i*50}ms`}}>
-                                        <div className="w-6 h-6 bg-white rounded-md border border-forest-100"></div>
+                                {isSugarSuspicious ? (
+                                    <div className="bg-amber-100/50 p-4 rounded-2xl border border-amber-200 text-amber-800 flex gap-3 items-start">
+                                        <AlertTriangle size={20} className="shrink-0 mt-0.5" />
+                                        <div className="text-xs leading-relaxed">
+                                            <p className="font-bold mb-1">Warning: Potential Data Error</p>
+                                            <p>This product has a low health score ({result.health_score}/100), but AI detected 0g sugar. This is highly unusual for this type of product. Please check the nutrition label manually.</p>
+                                        </div>
                                     </div>
-                                    ))
                                 ) : (
-                                    <div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 px-4 py-2 rounded-xl w-full">
-                                        <CheckCircle2 size={18}/>
-                                        <span className="text-sm font-bold">Great! Low sugar product.</span>
-                                    </div>
-                                )}
-                                </div>
-                                
-                                {Math.ceil(result.nutrition_summary.sugar_g / 4) > 0 && (
-                                    <div className="p-4 bg-forest-50 rounded-2xl border border-forest-100 flex gap-3 items-start">
-                                        <Info size={18} className="text-forest-600 shrink-0 mt-0.5" />
-                                        <p className="text-xs text-forest-800 leading-relaxed font-medium">
-                                        Consuming this product is equivalent to eating <strong>{Math.ceil(result.nutrition_summary.sugar_g / 4)} sugar cubes</strong> directly.
-                                        </p>
-                                    </div>
+                                    <>
+                                        <div className="flex flex-wrap gap-3 mb-5">
+                                        {Math.ceil(result.nutrition_summary.sugar_g / 4) > 0 ? (
+                                            Array.from({ length: Math.ceil(result.nutrition_summary.sugar_g / 4) }).map((_, i) => (
+                                            <div key={i} className="w-10 h-10 bg-forest-50 border border-forest-200 rounded-xl flex items-center justify-center shadow-sm animate-in zoom-in duration-300" style={{ animationDelay: `${i*50}ms`}}>
+                                                <div className="w-6 h-6 bg-white rounded-md border border-forest-100"></div>
+                                            </div>
+                                            ))
+                                        ) : (
+                                            <div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 px-4 py-2 rounded-xl w-full">
+                                                <CheckCircle2 size={18}/>
+                                                <span className="text-sm font-bold">Great! Low sugar product.</span>
+                                            </div>
+                                        )}
+                                        </div>
+                                        
+                                        {Math.ceil(result.nutrition_summary.sugar_g / 4) > 0 && (
+                                            <div className="p-4 bg-forest-50 rounded-2xl border border-forest-100 flex gap-3 items-start">
+                                                <Info size={18} className="text-forest-600 shrink-0 mt-0.5" />
+                                                <p className="text-xs text-forest-800 leading-relaxed font-medium">
+                                                Consuming this product is equivalent to eating <strong>{Math.ceil(result.nutrition_summary.sugar_g / 4)} sugar cubes</strong> directly.
+                                                </p>
+                                            </div>
+                                        )}
+                                    </>
                                 )}
                         </div>
 
+                        {result.alerts.length > 0 && (
+                            <div className="bg-white rounded-3xl border border-rose-100 shadow-sm overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-700">
+                                <button 
+                                    onClick={() => setShowWarnings(!showWarnings)}
+                                    className="w-full flex justify-between items-center p-6 hover:bg-rose-50/50 transition-colors group"
+                                >
+                                    <div className="flex items-center gap-2 text-rose-600">
+                                        <AlertTriangle size={20}/> 
+                                        <h3 className="font-bold text-sm uppercase tracking-wide">Safety Warnings ({result.alerts.length})</h3>
+                                    </div>
+                                    {showWarnings ? <ChevronUp size={20} className="text-rose-400" /> : <ChevronDown size={20} className="text-rose-400" />}
+                                </button>
+                                
+                                {showWarnings && (
+                                    <div className="px-6 pb-6 pt-0 space-y-3 bg-white">
+                                        {result.alerts.map((alert, idx) => (
+                                            <div key={idx} className="p-4 bg-gray-50 rounded-2xl border border-gray-100 hover:bg-gray-100 transition-colors">
+                                                <div className="flex justify-between items-start mb-1">
+                                                    <span className="font-bold text-gray-900 text-sm">{alert.name}</span>
+                                                    <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wide border ${
+                                                        alert.category === "Halal" ? "bg-purple-100 text-purple-700 border-purple-200" :
+                                                        alert.category === "Allergy" ? "bg-orange-100 text-orange-700 border-orange-200" :
+                                                        "bg-blue-100 text-blue-700 border-blue-200"
+                                                    }`}>
+                                                        {alert.category}
+                                                    </span>
+                                                </div>
+                                                <p className="text-xs text-gray-600 leading-relaxed">{alert.risk}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
 
-                {result.alerts.length > 0 && (
-                    <div className="bg-white rounded-3xl border border-rose-100 shadow-sm overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-700 delay-100">
-                            <button 
-                            onClick={() => setShowWarnings(!showWarnings)}
-                            className="w-full flex justify-between items-center p-6 hover:bg-rose-50/50 transition-colors group"
-                            >
-                            <div className="flex items-center gap-2 text-rose-600">
-                                <AlertTriangle size={20}/> 
-                                <h3 className="font-bold text-sm uppercase tracking-wide">Safety Warnings ({result.alerts.length})</h3>
-                            </div>
-                            {showWarnings ? <ChevronUp size={20} className="text-rose-400" /> : <ChevronDown size={20} className="text-rose-400" />}
-                            </button>
-                            
-                            {showWarnings && (
-                                <div className="px-6 pb-6 pt-0 space-y-3 bg-white">
-                                {result.alerts.map((alert, idx) => (
-                                    <div key={idx} className="p-4 bg-gray-50 rounded-2xl border border-gray-100 hover:bg-gray-100 transition-colors">
-                                        <div className="flex justify-between items-start mb-1">
-                                            <span className="font-bold text-gray-900 text-sm">{alert.name}</span>
-                                            <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wide border ${
-                                                alert.category === "Halal" ? "bg-purple-100 text-purple-700 border-purple-200" :
-                                                alert.category === "Allergy" ? "bg-orange-100 text-orange-700 border-orange-200" :
-                                                "bg-blue-100 text-blue-700 border-blue-200"
-                                            }`}>
-                                                {alert.category}
-                                            </span>
-                                        </div>
-                                        <p className="text-xs text-gray-600 leading-relaxed">{alert.risk}</p>
+                {result.healthy_alternatives && result.healthy_alternatives.length > 0 && (
+                    <div className="bg-white rounded-3xl border border-emerald-100 shadow-sm overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-700 delay-100">
+                        <div className="px-6 py-4 border-b border-emerald-100 flex items-center gap-2 bg-emerald-50/50">
+                            <Sprout size={20} className="text-emerald-600" />
+                            <h3 className="font-bold text-emerald-900 text-sm uppercase tracking-wide">Smart Healthy Swaps</h3>
+                        </div>
+                        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {result.healthy_alternatives.map((alt, idx) => (
+                                <div key={idx} className="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100 hover:shadow-md transition-all flex flex-col gap-2">
+                                    <div className="flex items-center justify-between">
+                                        <span className="font-bold text-emerald-900 text-base">{alt.name}</span>
+                                        <ArrowRight size={18} className="text-emerald-500"/>
                                     </div>
-                                ))}
+                                    <p className="text-sm text-emerald-700/80 leading-relaxed">{alt.reason}</p>
                                 </div>
-                            )}
+                            ))}
+                        </div>
                     </div>
                 )}
 
                 <div className="bg-white rounded-3xl border border-forest-200 overflow-hidden shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200">
+                    <div className="px-6 py-4 border-b border-forest-100 flex items-center gap-2 bg-forest-50/30">
+                        <Search size={18} className="text-forest-500"/>
+                        <h3 className="font-bold text-forest-800 text-sm uppercase tracking-wide">Verification Data</h3>
+                    </div>
                     <button 
                         onClick={() => setShowOCR(!showOCR)}
                         className="w-full flex justify-between items-center p-6 hover:bg-forest-50 transition-colors group"
                     >
                         <div className="flex items-center gap-3 text-forest-700">
-                            <div className="p-2 bg-forest-50 rounded-full group-hover:bg-white transition-colors border border-forest-100">
-                                <Search size={18} />
-                            </div>
-                            <span className="font-bold text-sm">Verify Scanned Ingredients</span>
+                            <span className="font-bold text-sm">Verify Scanned Ingredients (OCR)</span>
                         </div>
                         {showOCR ? <ChevronUp size={18} className="text-forest-400" /> : <ChevronDown size={18} className="text-forest-400" />}
                     </button>
@@ -331,7 +418,7 @@ export default function ResultPage() {
                             <p className="text-[10px] text-forest-400 my-3 font-bold uppercase tracking-wide pl-1">
                                 Raw Text Detected by AI:
                             </p>
-                            <div className="p-4 bg-white rounded-2xl border border-forest-200 text-xs font-mono text-forest-600 whitespace-pre-wrap wrap-break-word leading-relaxed max-h-60 overflow-y-auto shadow-inner">
+                            <div className="p-4 bg-white rounded-2xl border border-forest-200 text-xs font-mono text-forest-600 wrap-break-word leading-relaxed max-h-60 overflow-y-auto shadow-inner">
                                 {result.detected_ingredients_text || "No legible text detected."}
                             </div>
                             <div className="mt-3 flex items-start gap-2 text-[10px] text-amber-700 bg-amber-50 p-2 rounded-lg border border-amber-100">
@@ -342,7 +429,7 @@ export default function ResultPage() {
                     )}
                 </div>
 
-                <div className="bg-white rounded-3xl border border-forest-200 shadow-lg overflow-hidden flex flex-col min-h-100 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300">
+                <div className="bg-white rounded-3xl border border-forest-200 shadow-lg overflow-hidden flex flex-col min-h-125 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300">
                     <div className="px-6 py-4 border-b border-forest-100 flex justify-between items-center bg-forest-50/50">
                         <div className="flex items-center gap-2">
                             <div className="bg-forest-600 text-white p-1.5 rounded-lg shadow-sm">
@@ -356,7 +443,7 @@ export default function ResultPage() {
                         <MessageCircle size={18} className="text-forest-300"/>
                     </div>
                     
-                    <div className="flex-1 bg-white p-5 overflow-y-auto space-y-4 max-h-87.5">
+                    <div className="flex-1 bg-white p-5 overflow-y-auto space-y-4 max-h-112.5">
                         {chatMessages.length === 0 && (
                             <div className="text-center mt-12">
                                 <div className="w-12 h-12 bg-forest-50 text-forest-600 rounded-full flex items-center justify-center mx-auto mb-3 border border-forest-100">
