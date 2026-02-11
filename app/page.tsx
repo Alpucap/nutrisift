@@ -1,8 +1,9 @@
 import Link from "next/link";
+import Image from "next/image"; // Import Image component
 import { 
   Camera, Zap, ScanBarcode, 
   ArrowRight, Activity, CheckCircle2, Search,
-  ShieldCheck, AlertTriangle, Leaf, Sprout
+  ShieldCheck, AlertTriangle, Sprout 
 } from "lucide-react";
 
 export default function Home() {
@@ -14,10 +15,14 @@ export default function Home() {
 
       <nav className="fixed top-0 left-0 right-0 z-50 w-full px-6 md:px-12 lg:px-20 h-24 flex items-center justify-between backdrop-blur-md bg-forest-50/80 border-b border-forest-100/50">
         <div className="flex items-center gap-3">
-          <div className="bg-forest-600 p-2.5 rounded-2xl text-white shadow-lg shadow-forest-200">
-            <Leaf size={24} fill="currentColor" />
-          </div>
-          <span className="font-bold text-2xl tracking-tight text-forest-900">NutriSift AI</span>
+          <Image 
+            src="/nutrisift.svg" 
+            alt="NutriSift Logo" 
+            width={36} 
+            height={36} 
+            className="w-6 h-6 object-contain"
+          />
+          <span className="font-bold text-2xl tracking-tight text-forest-900">NutriSift</span>
         </div>
         
         <div className="hidden md:flex items-center gap-8">
